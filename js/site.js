@@ -39,7 +39,7 @@
   function applyPhone() {
     $$('.js-phone').forEach(function (el) { el.textContent = S.phone; });
     $$('a.js-tel').forEach(function (a) { a.href = 'tel:' + digits(); a.setAttribute('aria-label', '전화 걸기 ' + S.phone); });
-    $$('[data-sms="quick"]').forEach(function (a) { a.href = smsLink('[성우폐차장 문자견적문의]\n차종:\n차량번호:\n운행여부:\n차량위치:'); });
+    $$('[data-sms="quick"]').forEach(function (a) { a.href = smsLink('[문자견적문의]\n차종:\n차량번호:\n운행여부:\n차량위치:'); });
   }
 
   /* ---------------- 페이지 이동 ---------------- */
@@ -64,9 +64,9 @@
 
   /* ---------------- 신청/견적 폼 ---------------- */
   var FORMS = {
-    ap: { sec: 'isApply', title: '[성우폐차장 폐차신청]', req: [['ap-phone', '연락처'], ['ap-model', '차종'], ['ap-plate', '차량번호']],
+    ap: { sec: 'isApply', title: '[폐차신청]', req: [['ap-phone', '연락처'], ['ap-model', '차종'], ['ap-plate', '차량번호']],
       fields: [['연락처', 'ap-phone'], ['차종', 'ap-model'], ['차량번호', 'ap-plate'], ['차량위치', 'ap-loc']], cond: 'ap-cond' },
-    es: { sec: 'isEstimate', title: '[성우폐차장 온라인견적]', req: [['es-model', '차종'], ['es-plate', '차량번호'], ['es-phone', '연락처']],
+    es: { sec: 'isEstimate', title: '[온라인견적]', req: [['es-model', '차종'], ['es-plate', '차량번호'], ['es-phone', '연락처']],
       fields: [['차종', 'es-model'], ['차량번호', 'es-plate'], ['연락처', 'es-phone'], ['차량위치', 'es-region']], cond: 'es-cond' }
   };
   function submitForm(id, link, ev) {
@@ -74,17 +74,22 @@
     var val = function (i) { var el = document.getElementById(i); return el ? el.value.trim() : ''; };
     var miss = f.req.filter(function (r) { return !val(r[0]); }).map(function (r) { return r[1]; });
     var agree = $('input[type=checkbox]', sec);
-    var err = miss.length ? miss.join(', ') + '을(를) 입력해 주세요.' : (agree && !agree.checked ? '개인정보 수집·이용에 동의해 주세요.' : '');
-    var errBox = $('[data-if="' + id + 'ErrShow"]'), done = $('[data-if="' + id + 'Done"]');
-    if (err) {
+    var done = $('[data-if="' + id + 'Done"]');
+    var firstMiss = f.req.filter(function (r) { return !val(r[0]); })[0];
+    var target = firstMiss ? document.getElementById(firstMiss[0]) : (agree && !agree.checked ? agree : null);
+    if (target) {
       ev.preventDefault();
-      errBox.hidden = false; var p = $('p', errBox); if (p) p.textContent = err;
-      done.hidden = true; return;
+      var row = target.closest('label') || target.parentElement;
+      row.style.transition = 'box-shadow .2s'; row.style.boxShadow = '0 0 0 3px #FFC400';
+      setTimeout(function () { row.style.boxShadow = ''; }, 1800);
+      try { target.scrollIntoView({ block: 'center' }); } catch (e) {}
+      if (target.type !== 'checkbox') target.focus();
+      if (done) done.hidden = true; return;
     }
     var cond = $('input[name="' + f.cond + '"]:checked');
     var body = f.title + '\n' + f.fields.map(function (x) { return x[0] + ': ' + (val(x[1]) || '-'); }).join('\n') + '\n차량상태: ' + (cond ? cond.value : '-');
     link.href = smsLink(body);
-    errBox.hidden = true; done.hidden = false;
+    if (done) done.hidden = false;
   }
 
   /* ---------------- 후기 ---------------- */
@@ -155,8 +160,17 @@
     });
     return d.innerHTML;
   }
+  function applyNav() {
+    $$('nav [data-go]').forEach(function (b) {
+      var k = 'nav:' + b.getAttribute('data-go');
+      if (!b.hasAttribute('data-orig')) b.setAttribute('data-orig', b.textContent);
+      b.textContent = S.content[k] || b.getAttribute('data-orig');
+    });
+  }
   function applyContent() {
+    applyNav();
     Object.keys(S.content).forEach(function (k) {
+      if (k.indexOf('nav:') === 0) return;
       var el = $('[data-e="' + k + '"]'); if (el && S.content[k] != null) el.innerHTML = sanitize(S.content[k]);
     });
     Object.keys(S.images).forEach(function (k) {
@@ -200,7 +214,7 @@
   function boot() {
     $$('[data-e]').forEach(function (el) { ORIG[el.getAttribute('data-e')] = el.innerHTML; });
     $$('[data-img]').forEach(function (el) { ORIG_IMG[el.getAttribute('data-img')] = el.getAttribute('src'); });
-    applyPhone(); renderReviews();
+    applyNav(); applyPhone(); renderReviews();
     var h = (location.hash || '').slice(1);
     if (PAGE_IF[h]) showPage(h);
     if (HAS_FB) loadSaved().catch(function (e) { console.warn('저장된 내용 불러오기 실패', e); });
@@ -223,7 +237,7 @@
   /* =========================================================
      관리자 모드
      ========================================================= */
-  var A = { on: false, editing: false, dirtyText: {}, dirtyImg: {}, dirtyPhone: false, dirtyReviews: false };
+  var A = { on: false, editing: false, dirtyText: {}, dirtyImg: {}, dirtyPhone: false, dirtyReviews: false, dirtyNav: false };
 
   function modal(html) {
     var m = document.createElement('div'); m.className = 'adm-modal';
@@ -231,7 +245,7 @@
     document.body.appendChild(m); return m;
   }
   function msg(t) { var el = $('#adm-msg'); if (el) el.textContent = t; }
-  function isDirty() { return A.dirtyPhone || A.dirtyReviews || Object.keys(A.dirtyText).length || Object.keys(A.dirtyImg).length; }
+  function isDirty() { return A.dirtyPhone || A.dirtyReviews || A.dirtyNav || Object.keys(A.dirtyText).length || Object.keys(A.dirtyImg).length; }
 
   function startAdmin() {
     if (A.on) return;
@@ -260,7 +274,7 @@
   function buildBar(u) {
     if ($('#adm-bar')) return;
     var bar = document.createElement('div'); bar.id = 'adm-bar';
-    bar.innerHTML = '<b>관리자</b><button type="button" data-a="edit">✎ 글·사진 수정</button><button type="button" data-a="phone">전화번호</button>' +
+    bar.innerHTML = '<b>관리자</b><button type="button" data-a="edit">✎ 글·사진 수정</button><button type="button" data-a="phone">전화번호</button><button type="button" data-a="nav">메뉴 이름</button>' +
       '<button type="button" data-a="reviews">후기 관리</button><button type="button" data-a="reset">선택한 글 원래대로</button>' +
       '<button type="button" class="save" data-a="save">저장하기</button><button type="button" data-a="out">로그아웃</button>' +
       '<span class="msg" id="adm-msg">' + esc(u.email) + ' 로그인됨 · "글·사진 수정"을 누르면 화면의 글을 바로 고칠 수 있어요.</span>';
@@ -271,6 +285,7 @@
       var a = b.getAttribute('data-a');
       if (a === 'edit') toggleEdit(b);
       if (a === 'phone') phoneBox();
+      if (a === 'nav') navBox();
       if (a === 'reviews') reviewsBox();
       if (a === 'reset') resetFocused();
       if (a === 'save') saveAll();
@@ -359,6 +374,25 @@
     };
   }
 
+  /* 메뉴 이름 */
+  function navBox() {
+    var btns = $$('nav [data-go]');
+    var m = modal('<h2>메뉴 이름 바꾸기</h2><p style="font-size:14px;color:#4A5D80;margin:0">상단 메뉴(홈·인사말…)의 이름을 바꿀 수 있어요. 비워두면 원래 이름으로 돌아가요.</p>' +
+      btns.map(function (b, i) {
+        var k = b.getAttribute('data-go');
+        return '<label for="nv-' + i + '">' + esc(b.getAttribute('data-orig') || b.textContent) + '</label><input id="nv-' + i + '" data-k="' + k + '" type="text" value="' + esc(S.content['nav:' + k] || '') + '" placeholder="' + esc(b.getAttribute('data-orig') || b.textContent) + '">';
+      }).join('') +
+      '<div class="adm-row"><button class="adm-btn" type="button" data-x>취소</button><button class="adm-btn primary" type="button" data-ok>적용</button></div>');
+    $('[data-x]', m).onclick = function () { m.remove(); };
+    $('[data-ok]', m).onclick = function () {
+      $$('input[data-k]', m).forEach(function (inp) {
+        var k = 'nav:' + inp.getAttribute('data-k'), v = inp.value.trim();
+        if (v) S.content[k] = v; else delete S.content[k];
+      });
+      A.dirtyNav = true; applyNav(); m.remove(); msg('메뉴 이름을 바꿨어요. "저장하기"를 눌러야 반영돼요.');
+    };
+  }
+
   /* 후기 관리 */
   var TAGS = ['일반폐차', '조기폐차', '압류폐차', '상속폐차', '법인폐차'];
   function reviewsBox() {
@@ -439,7 +473,7 @@
       return db.collection('site').doc('main').set({ phone: S.phone, content: S.content, images: S.images, reviews: reviews, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
     }).then(function () {
       oldImgIds.forEach(deleteImage);
-      A.dirtyText = {}; A.dirtyImg = {}; A.dirtyPhone = false; A.dirtyReviews = false;
+      A.dirtyText = {}; A.dirtyImg = {}; A.dirtyPhone = false; A.dirtyReviews = false; A.dirtyNav = false;
       $$('.changed').forEach(function (el) { el.classList.remove('changed'); });
       msg('저장했어요! 손님이 보는 홈페이지에 바로 반영됐어요. (' + new Date().toLocaleTimeString('ko-KR') + ')');
     }).catch(function (e) {
