@@ -43,8 +43,9 @@
   }
 
   /* ---------------- 페이지 이동 ---------------- */
-  function showPage(p, anchor) {
+  function showPage(p, anchor, fromHistory) {
     if (!PAGE_IF[p]) p = 'home';
+    var changed = p !== S.page;
     S.page = p;
     Object.keys(PAGE_IF).forEach(function (k) {
       var el = $('[data-if="' + PAGE_IF[k] + '"]'); if (el) el.hidden = (k !== p);
@@ -54,7 +55,10 @@
       b.style.background = on ? '#0B2A5B' : 'transparent'; b.style.color = on ? '#FFE14D' : '#0B2A5B';
       if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
-    try { history.replaceState(null, '', p === 'home' ? location.pathname + location.search : '#' + p); } catch (e) {}
+    if (!fromHistory) {
+      var url = p === 'home' ? location.pathname + location.search : '#' + p;
+      try { if (changed) history.pushState({ page: p }, '', url); else history.replaceState({ page: p }, '', url); } catch (e) {}
+    }
     var jump = function () {
       var el = anchor && document.getElementById(anchor);
       if (el) el.scrollIntoView({ block: 'start' }); else window.scrollTo(0, 0);
@@ -216,9 +220,15 @@
     $$('[data-img]').forEach(function (el) { ORIG_IMG[el.getAttribute('data-img')] = el.getAttribute('src'); });
     applyNav(); applyPhone(); renderReviews();
     var h = (location.hash || '').slice(1);
-    if (PAGE_IF[h]) showPage(h);
+    if (PAGE_IF[h]) showPage(h, null, true);
     if (HAS_FB) loadSaved().catch(function (e) { console.warn('저장된 내용 불러오기 실패', e); });
     if (h === 'admin' || /[?&]admin\b/.test(location.search)) startAdmin();
+    try { history.replaceState({ page: S.page }, '', location.href); } catch (e) {}
+    window.addEventListener('popstate', function (e) {
+      var pg = (e.state && e.state.page) || (location.hash || '').slice(1);
+      if (pg === 'admin') { startAdmin(); return; }
+      showPage(PAGE_IF[pg] ? pg : 'home', null, true);
+    });
     window.addEventListener('hashchange', function () { if (location.hash === '#admin') startAdmin(); });
 
     document.addEventListener('click', function (e) {
